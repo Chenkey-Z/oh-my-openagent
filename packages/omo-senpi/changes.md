@@ -1,3 +1,18 @@
+## 2026-10-13 - Kimi K3 first-turn Todo requests require their phased list
+
+`src/components/kimi-todo-first-turn/index.ts` specializes the first-response Todo
+wire schema for `kimi-coding/k3` on Anthropic Messages, requiring `op` and `list`
+and advertising only `init`. Direct Provider SSE showed K3 returning `init` with
+only scalar `task`/`phase` fields under the shared all-optional schema, even with
+no forced tool choice; those calls reach the normalizer without a recoverable
+plan. A required-list request generated a complete plan in the observed probes.
+
+The component recognizes the staged first-turn reminder in the actual request,
+not only the persisted branch. Later assistant responses and existing Todo tasks
+keep the full tool schema. Other models, local validation, tool choice, state
+persistence and error recovery are unchanged. `src/extension/component-list.ts`
+registers it with the adapter's standard component disable flag.
+
 ## 2026-10-11 - The control confirm drops its redundant time floor (#9967)
 
 `control-confirm.ts` no longer refuses a confirm under 3 s of budget: the service facade already throws before asking when under 8 s of run time is left, so the component check never fired in production. The near-duplicate "RPC-mode confirm frame never answered" test is removed; "a client that never answers" keeps that contract.
