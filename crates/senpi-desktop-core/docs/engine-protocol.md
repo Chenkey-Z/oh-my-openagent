@@ -28,6 +28,8 @@ Protocol version `1`, ABI `senpi-desktop/1`. JSON-RPC 2.0, one JSON message per 
 | `scroll` | exec | no | no | `ScrollParams` | `null` | `ErrorCode` |
 | `typeText` | exec | no | no | `TypeTextParams` | `null` | `ErrorCode` |
 | `keyChord` | exec | no | no | `KeyChordParams` | `null` | `ErrorCode` |
+| `holdKeys` | exec | no | no | `HoldKeysParams` | `null` | `ErrorCode` |
+| `holdMouse` | exec | no | no | `HoldMouseParams` | `null` | `ErrorCode` |
 | `raiseWindow` | exec | no | no | `RaiseWindowParams` | `null` | `ErrorCode` |
 | `menus.items` | read | no | no | `MenuPathParams` | `Vec<MenuItem>` | `ErrorCode` |
 | `menus.select` | exec | no | no | `MenuSelectParams` | `null` | `ErrorCode` |
@@ -63,7 +65,7 @@ Protocol version `1`, ABI `senpi-desktop/1`. JSON-RPC 2.0, one JSON message per 
 
 ## Errors
 
-An engine error is `{code, message, data: {code: <ErrorCode>, hint}}`. A method-level rejection is the standard `-32601 Method not found` with `data: {reason: "unknown" | "hostOnly" | "testOnly"}`. Malformed input uses the standard `-32700`, `-32600`, and `-32602`.
+An engine error is `{code, message, data: {code: <ErrorCode>, hint}}`. A method-level rejection is the standard `-32601 Method not found` with `data: {reason: "unknown" | "hostOnly" | "testOnly"}`. Malformed input uses the standard `-32700`, `-32600`, and `-32602`. `CaptureUnavailable` also carries `data: {captureUnavailable: {reason}}`; B9 defines the reason `"minimized"` for a window that exists but is minimized. The table is append-only: a new code takes the next ordinal, so no existing numeric code moves.
 
 | ErrorCode | JSON-RPC code |
 |---|---|
@@ -90,6 +92,11 @@ An engine error is `{code, message, data: {code: <ErrorCode>, hint}}`. A method-
 | `TransactionFailed` | `-32020` |
 | `InputBusy` | `-32021` |
 | `ControlRequired` | `-32022` |
+| `CaptureUnavailable` | `-32023` |
+| `UserIntervened` | `-32024` |
+| `AxUnconfirmed` | `-32025` |
+| `SpaceUnsupported` | `-32026` |
+| `SpaceMoveDenied` | `-32027` |
 
 ## Conformance corpus
 

@@ -13,6 +13,7 @@ use crate::keys::KeyName;
 use crate::types::{
     CaptureCaps, DesktopCapabilities, DesktopDisplay, DesktopPoint, DesktopWindow, FrontWindow, Target,
 };
+use crate::user_input::UserPresses;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DeliveryMode {
@@ -86,14 +87,31 @@ pub enum PointerEvent {
 }
 
 pub trait Backend: Send {
+    /// Independent release ownership, usable without borrowing a busy backend.
+    /// Owners register this before admitting input into bounded fatal-stop mode.
+    fn emergency_release(&self) -> Option<std::sync::Arc<dyn EmergencyRelease>> {
+        None
+    }
+
     fn permission_denied(&mut self, _permission: TccPermission) -> DesktopError {
         DesktopError::permission_denied("input permission is not granted")
     }
 
     fn capabilities(&mut self) -> DesktopCapabilities;
+
+    /// Updates the display-only virtual cursor without changing admission.
+    fn set_show_cursor(&mut self, _enabled: bool) {}
+
     fn displays(&mut self) -> CoreResult<Vec<DesktopDisplay>>;
     fn windows(&mut self) -> CoreResult<Vec<DesktopWindow>>;
-    fn capture(&mut self, target: &Target, caps: &CaptureCaps) -> CoreResult<(RgbaImage, FrameGeometry)>;
+    /// Captures `target`. `exclude_window_titles` names windows a display
+    /// capture must leave out; backends without exclusion support ignore it.
+    fn capture(
+        &mut self,
+        target: &Target,
+        caps: &CaptureCaps,
+        exclude_window_titles: &[String],
+    ) -> CoreResult<(RgbaImage, FrameGeometry)>;
     fn pointer(
         &mut self,
         target: &Target,
@@ -131,6 +149,40 @@ pub trait Backend: Send {
         Ok(())
     }
     fn key_chord(&mut self, target: &Target, keys: &[KeyName], mode: DeliveryMode) -> CoreResult<()>;
+    /// [`Self::key_chord`] with `check_stop` before every key press, so a stop
+    /// or a cancellation lands between presses. The default checks once,
+    /// before the chord, for backends that press a chord in one call.
+    fn key_chord_interruptible(
+        &mut self,
+        target: &Target,
+        keys: &[KeyName],
+        mode: DeliveryMode,
+        check_stop: &dyn Fn() -> CoreResult<()>,
+    ) -> CoreResult<()> {
+        check_stop()?;
+        self.key_chord(target, keys, mode)
+    }
+    /// Native press/release around a session-owned interruptible wait.
+    /// Backends without bounded input refuse rather than synthesizing clicks.
+    fn hold_keys(
+        &mut self,
+        _target: &Target,
+        _keys: &[KeyName],
+        _mode: DeliveryMode,
+        _control: &crate::holds::HoldControl<'_>,
+    ) -> CoreResult<()> {
+        Err(DesktopError::input_failed("bounded key holds are unavailable on this backend"))
+    }
+
+    fn hold_mouse(
+        &mut self,
+        _target: &Target,
+        _hold: &crate::holds::MouseHold<'_>,
+        _mode: DeliveryMode,
+        _control: &crate::holds::HoldControl<'_>,
+    ) -> CoreResult<()> {
+        Err(DesktopError::input_failed("bounded mouse holds are unavailable on this backend"))
+    }
     fn raise_window(&mut self, id: &str) -> CoreResult<()>;
 
     /// The immediate children of `window`'s menu at `path` (empty = the menu
@@ -192,6 +244,21 @@ pub trait Backend: Send {
     fn screen_locked(&mut self) -> CoreResult<bool> {
         Ok(false)
     }
+
+    /// Starts watching the user's own key presses and clicks; idempotent.
+    /// Backends without a watch keep this no-op and report no
+    /// `interventionWatch`.
+    fn watch_user_input(&mut self) {}
+
+    /// The user's presses the watch recorded since the last call.
+    fn take_user_presses(&mut self) -> UserPresses {
+        UserPresses::default()
+    }
+}
+
+/// Replays only tracked downs. Must not wait for the backend's input scope.
+pub trait EmergencyRelease: Send + Sync {
+    fn release_all(&self) -> CoreResult<()>;
 }
 
 /// The native window that owns an accessibility element.

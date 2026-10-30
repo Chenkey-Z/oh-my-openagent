@@ -1,6 +1,7 @@
 //! The fake backend plus injected panics: the fake itself can only fail a
 //! call, and a transaction must also survive a backend that unwinds.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use image::RgbaImage;
@@ -31,9 +32,20 @@ impl Panics {
     }
 }
 
+/// Counts `watch_user_input` calls across every backend a factory built.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Watches(Arc<AtomicUsize>);
+
+impl Watches {
+    pub(crate) fn count(&self) -> usize {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
 pub(crate) struct PanickyFake {
     pub(crate) inner: FakeBackend,
     pub(crate) panics: Panics,
+    pub(crate) watches: Watches,
 }
 
 impl Backend for PanickyFake {
@@ -55,8 +67,8 @@ impl Backend for PanickyFake {
     fn windows(&mut self) -> CoreResult<Vec<DesktopWindow>> {
         self.inner.windows()
     }
-    fn capture(&mut self, target: &Target, caps: &CaptureCaps) -> CoreResult<(RgbaImage, FrameGeometry)> {
-        self.inner.capture(target, caps)
+    fn capture(&mut self, target: &Target, caps: &CaptureCaps, exclude_window_titles: &[String]) -> CoreResult<(RgbaImage, FrameGeometry)> {
+        self.inner.capture(target, caps, exclude_window_titles)
     }
     fn pointer(
         &mut self,
@@ -91,6 +103,18 @@ impl Backend for PanickyFake {
     }
     fn raise_window(&mut self, id: &str) -> CoreResult<()> {
         self.inner.raise_window(id)
+    }
+    fn hold_keys(
+        &mut self, target: &Target, keys: &[KeyName], mode: DeliveryMode,
+        control: &senpi_desktop_core::holds::HoldControl<'_>,
+    ) -> CoreResult<()> {
+        self.inner.hold_keys(target, keys, mode, control)
+    }
+    fn hold_mouse(
+        &mut self, target: &Target, hold: &senpi_desktop_core::holds::MouseHold<'_>,
+        mode: DeliveryMode, control: &senpi_desktop_core::holds::HoldControl<'_>,
+    ) -> CoreResult<()> {
+        self.inner.hold_mouse(target, hold, mode, control)
     }
     fn menu_items(&mut self, window: &DesktopWindow, path: &[String]) -> CoreResult<Vec<MenuItem>> {
         self.inner.menu_items(window, path)
@@ -131,5 +155,9 @@ impl Backend for PanickyFake {
     }
     fn screen_locked(&mut self) -> CoreResult<bool> {
         self.inner.screen_locked()
+    }
+    fn watch_user_input(&mut self) {
+        self.watches.0.fetch_add(1, Ordering::SeqCst);
+        self.inner.watch_user_input();
     }
 }

@@ -9,6 +9,8 @@ mod clock;
 mod desktop_impl;
 mod fake;
 mod faults;
+mod frames_impl;
+mod holds_impl;
 mod menus_impl;
 mod method;
 mod scenario;
@@ -17,7 +19,7 @@ mod sink;
 pub use clock::FakeClock;
 pub use fake::FakeBackend;
 pub use faults::Faults;
-pub use method::FakeMethod;
+pub use method::{AxWrite, FakeMethod};
 pub use scenario::{
     fake_capabilities, DelayMs, FakeAxNode, FakeBounds, FakeMenuNode, FakeScenario, ResizeWindow,
     ScenarioError, ScriptedFailure,

@@ -48,17 +48,18 @@ describe("Kimi K3 first-turn Todo schema compatibility", () => {
 
     const output = await harness()(input)
     expect(output).toBeDefined()
-    const schema = output!.tools[1].input_schema
+    if (output === undefined) throw new Error("Expected a specialized first-turn request")
+    const schema = output.tools[1].input_schema
     expect(Compile(schema).Check(malformed)).toBe(false)
     expect(Compile(schema).Check({ op: "init", list: [{ phase: "Investigation", items: ["Inspect adapter constraints"] }, { phase: "Verification", items: ["Verify cancellation handling"] }] })).toBe(true)
     expect(Compile(schema).Check({ op: "done", list: [] })).toBe(false)
     expect(Compile(schema).Check({ list: [] })).toBe(false)
     expect(Object.keys(schema.properties)).toEqual(["op", "list"])
     expect(schema.properties.list).toEqual(input.tools[1].input_schema.properties.list)
-    expect(output!.tools[0]).toEqual(input.tools[0])
+    expect(output.tools[0]).toEqual(input.tools[0])
     expect(input).toEqual(before)
-    expect(output!.thinking).toEqual(input.thinking)
-    expect("tool_choice" in output!).toBe(false)
+    expect(output.thinking).toEqual(input.thinking)
+    expect("tool_choice" in output).toBe(false)
   })
 
   test("#given the first assistant response #when another request follows #then the full schema keeps every existing Todo operation", async () => {

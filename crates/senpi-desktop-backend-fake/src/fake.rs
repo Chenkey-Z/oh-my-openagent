@@ -7,8 +7,8 @@ use senpi_desktop_core::types::{DesktopCapabilities, DesktopDisplay, DesktopPoin
 use std::collections::BTreeMap;
 
 use crate::ax_tree::AxTree;
-use crate::faults::Faults;
-use crate::method::FakeMethod;
+use crate::faults::{Faults, Reply};
+use crate::method::{AxWrite, FakeMethod};
 use crate::scenario::{DelayMs, FakeMenuNode, FakeScenario, ResizeWindow};
 use crate::sink::{RecordingSink, SinkOp};
 
@@ -28,6 +28,7 @@ pub struct FakeBackend {
     pub(crate) capture_color: Rgba<u8>,
     delays: DelayMs,
     pub(crate) resize_window: Option<ResizeWindow>,
+    pub(crate) legacy_capture: bool,
     pub(crate) ax_tree: AxTree,
     pub(crate) ax_owner_unknown: bool,
     pub(crate) menus: BTreeMap<String, Vec<FakeMenuNode>>,
@@ -39,7 +40,15 @@ impl FakeBackend {
     pub fn new(scenario: FakeScenario) -> Self {
         let faults = Faults::default();
         for failure in &scenario.fail_next {
-            faults.fail_next(failure.method, failure.code);
+            let error = match &failure.reason {
+                Some(reason) => DesktopError::new(failure.code, format!("injected {:?} failure", failure.method))
+                    .with_capture_unavailable_reason(reason),
+                None => DesktopError::new(failure.code, format!("injected {:?} failure", failure.method)),
+            };
+            faults.fail_next_with(failure.method, error);
+        }
+        for write in &scenario.ax_cannot_complete {
+            faults.cannot_complete_next(*write);
         }
         Self {
             ax_tree: AxTree::build(&scenario.ax),
@@ -53,6 +62,7 @@ impl FakeBackend {
             capture_color: Rgba(scenario.capture_color),
             delays: scenario.delay_ms,
             resize_window: scenario.resize_window,
+            legacy_capture: scenario.legacy_capture,
             sink: RecordingSink::default(),
             faults,
         }
@@ -75,10 +85,21 @@ impl FakeBackend {
 
     /// Entry of every fallible call: scripted delay, then a queued failure.
     pub(crate) fn begin(&self, method: FakeMethod) -> CoreResult<()> {
+        self.delay(method);
+        self.faults.take(method).map_or(Ok(()), Err)
+    }
+
+    /// [`Self::begin`] for an AX write: the reply to report once the write
+    /// has landed ([`Reply::confirm`]).
+    pub(crate) fn begin_write(&self, write: AxWrite) -> CoreResult<Reply> {
+        self.delay(write.method());
+        self.faults.take_write(write)
+    }
+
+    fn delay(&self, method: FakeMethod) {
         if let Some(delay) = self.delays.for_method(method) {
             std::thread::sleep(delay);
         }
-        self.faults.take(method).map_or(Ok(()), Err)
     }
 
     pub(crate) fn window(&self, id: &str) -> CoreResult<&DesktopWindow> {
